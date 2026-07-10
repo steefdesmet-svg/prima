@@ -2,68 +2,72 @@
 <html lang="nl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#174d36">
-  <meta name="description" content="Walker Pro - wandelroutes zoeken rond je huidige locatie.">
+  <meta name="description" content="Walker Pro 0.1.0 - wandelroutes zoeken rond je huidige locatie.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./icons/icon.svg">
-  <link rel="stylesheet" href="./css/style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <title>Walker Pro</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <title>Walker Pro 0.1.0</title>
 </head>
 <body>
   <header class="topbar">
     <div>
-      <div class="app-title">🥾 Walker Pro</div>
-      <div id="installHint" class="hint">Klaar voor GitHub Pages</div>
+      <div class="brand">🥾 Walker Pro</div>
+      <div class="version">versie 0.1.0</div>
     </div>
-    <button id="installBtn" class="small-btn hidden">Installeer app</button>
+    <button id="installBtn" class="install hidden" type="button">Installeer app</button>
   </header>
 
-  <main class="layout">
+  <main>
     <section class="panel controls">
-      <h1>Wandelroutes in de buurt</h1>
-      <p class="muted">Druk op zoeken. Chrome vraagt automatisch toestemming voor je locatie.</p>
+      <h1>Wandelroutes rond mij</h1>
+      <p class="intro">Zoek bewegwijzerde wandelroutes binnen een gekozen straal en navigeer rechtstreeks naar het dichtstbijzijnde punt van de route.</p>
 
-      <div class="grid">
-        <label>Straal rond mij<br><input id="radiusKm" type="number" min="1" max="50" step="1" value="15"> km</label>
-        <label>Minimumafstand<br><input id="minKm" type="number" min="0" max="50" step="0.5" value="4"> km</label>
-        <label>Maximumafstand<br><input id="maxKm" type="number" min="1" max="80" step="0.5" value="20"> km</label>
+      <div class="fields">
+        <label>Straal
+          <span><input id="radiusKm" type="number" min="1" max="50" step="1" value="15"> km</span>
+        </label>
+        <label>Minimumafstand
+          <span><input id="minKm" type="number" min="0" max="50" step="0.5" value="4"> km</span>
+        </label>
+        <label>Maximumafstand
+          <span><input id="maxKm" type="number" min="1" max="80" step="0.5" value="20"> km</span>
+        </label>
       </div>
 
-      <button id="searchBtn" class="primary">📍 Zoek wandelroutes</button>
-      <button id="photoBtn" class="secondary">📷 Foto nemen op deze plaats</button>
-      <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden">
-
-      <div class="statusBox"><strong>Status</strong><div id="status">Wachten...</div></div>
-
-      <div class="compassBox">
-        <div class="compass" id="compassNeedle"><span>▲</span></div>
-        <div><strong>Kompas</strong><br><span id="heading">Nog niet actief</span></div>
-      </div>
-
-      <details class="helpBox">
-        <summary>Installatiehulp</summary>
-        <p>Zie je geen Android-installatievenster? Gebruik in Chrome rechtsboven ⋮ en kies <b>App installeren</b> of <b>Toevoegen aan startscherm</b>.</p>
-        <p id="pwaStatus">PWA-controle loopt...</p>
-      </details>
+      <button id="searchBtn" class="primary" type="button">📍 Zoek wandelroutes</button>
+      <div class="status"><strong>Status</strong><div id="statusText">Klaar.</div></div>
     </section>
 
-    <section class="mapwrap"><div id="map"></div></section>
+    <section class="map-section">
+      <div id="map" aria-label="Kaart met wandelroutes"></div>
+    </section>
 
-    <section class="panel results">
-      <h2>Gevonden routes</h2>
-      <div id="resultsList" class="cards"></div>
+    <section class="panel results-panel">
+      <div class="results-head">
+        <h2>Resultaten</h2>
+        <span id="resultCount">0 routes</span>
+      </div>
+      <div id="results" class="results"></div>
     </section>
   </main>
 
-  <template id="routeCardTpl">
-    <article class="card">
-      <h3></h3>
-      <p class="distance"></p>
-      <p class="meta"></p>
-      <a class="mapLink" target="_blank" rel="noopener">Bekijk in OpenStreetMap</a>
+  <template id="routeTemplate">
+    <article class="route-card">
+      <div class="route-top">
+        <div>
+          <h3 class="route-name"></h3>
+          <p class="route-info"></p>
+        </div>
+        <span class="route-distance"></span>
+      </div>
+      <p class="route-start"></p>
+      <div class="actions">
+        <button class="show-route" type="button">🗺 Bekijk route</button>
+        <a class="navigate" target="_blank" rel="noopener">🚗 Breng mij erheen</a>
+      </div>
     </article>
   </template>
 
