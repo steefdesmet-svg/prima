@@ -1,6 +1,6 @@
 "use strict";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 const OVERPASS_SERVERS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
@@ -85,8 +85,8 @@ function validateInputs() {
 function buildQuery(lat, lon, radiusKm) {
   const radiusM = Math.round(radiusKm * 1000);
   return `[out:json][timeout:45];
-    relation(around:${radiusM},${lat},${lon})[type=route][route~"^(hiking|foot)$"];
-    out tags geom;`;
+    relation(around:${radiusM},${lat},${lon})[type=route][route~"^(hiking|foot|walking)$"];
+    out body geom;`;
 }
 
 async function fetchOverpass(query) {
@@ -117,7 +117,10 @@ async function fetchOverpass(query) {
 function parseTaggedDistance(tags) {
   const raw = tags.distance || tags.length || "";
   const match = String(raw).replace(",", ".").match(/([0-9]+(?:\.[0-9]+)?)/);
-  return match ? Number(match[1]) : null;
+  if (!match) return null;
+  let value = Number(match[1]);
+  if (/\bm\b/i.test(String(raw)) && !/km/i.test(String(raw))) value /= 1000;
+  return value;
 }
 
 function haversineKm(a, b) {
@@ -133,7 +136,10 @@ function haversineKm(a, b) {
 
 function extractSegments(element) {
   const segments = [];
+  const seenWays = new Set();
   for (const member of element.members || []) {
+    if (member.type !== "way" || seenWays.has(member.ref)) continue;
+    seenWays.add(member.ref);
     if (Array.isArray(member.geometry) && member.geometry.length > 1) {
       segments.push(member.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
     }
@@ -171,7 +177,7 @@ function normaliseRoutes(elements, filters, user) {
     if (!segments.length) return null;
     const tagged = parseTaggedDistance(tags);
     const estimated = estimateLengthKm(segments);
-    const distanceKm = tagged || estimated;
+    const distanceKm = tagged ?? estimated;
     const start = nearestPoint(segments, user);
     return {
       id: element.id,
@@ -183,7 +189,7 @@ function normaliseRoutes(elements, filters, user) {
       start
     };
   }).filter(Boolean)
-    .filter(route => route.distanceKm >= filters.minKm && route.distanceKm <= filters.maxKm)
+    .filter(route => Number.isFinite(route.distanceKm) && route.distanceKm >= filters.minKm && route.distanceKm <= filters.maxKm)
     .sort((a, b) => (a.start?.distanceKm ?? Infinity) - (b.start?.distanceKm ?? Infinity));
 }
 
@@ -213,7 +219,7 @@ function renderRoutes(routes) {
   $("resultCount").textContent = `${routes.length} route${routes.length === 1 ? "" : "s"}`;
 
   if (!routes.length) {
-    container.innerHTML = '<div class="empty">Geen routes gevonden binnen deze afstandsgrenzen. Probeer een grotere straal of ruimere afstanden.</div>';
+    container.innerHTML = '<div class="empty">Er werden routes opgehaald, maar geen enkele viel binnen de ingestelde afstand van 4 tot 20 km. Probeer tijdelijk minimum 0 en maximum 30 km.</div>';
     return;
   }
 
@@ -251,10 +257,11 @@ async function searchRoutes() {
     const user = state.currentPosition;
     setStatus("Wandelroutes zoeken...");
     const data = await fetchOverpass(buildQuery(user.lat, user.lon, filters.radius));
-    setStatus("Routes verwerken...");
+    const rawCount = data.elements.length;
+    setStatus(`${rawCount} routes ontvangen; afstanden berekenen...`);
     const routes = normaliseRoutes(data.elements, filters, user);
     renderRoutes(routes);
-    setStatus(`${routes.length} geschikte route${routes.length === 1 ? "" : "s"} gevonden.`);
+    setStatus(`${routes.length} geschikte route${routes.length === 1 ? "" : "s"} gevonden uit ${rawCount} ontvangen routes.`);
   } catch (error) {
     console.error(error);
     const message = error?.code === 1
@@ -289,7 +296,8 @@ function setupPwaInstall() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    await navigator.serviceWorker.register("./sw.js");
+    const registration = await navigator.serviceWorker.register("./sw.js");
+    registration.update();
   } catch (error) {
     console.warn("Service worker kon niet worden geregistreerd", error);
   }
