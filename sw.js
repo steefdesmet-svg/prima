@@ -1,4 +1,4 @@
-const CACHE = "walker-pro-0.1.0";
+const CACHE = "walker-pro-0.1.1";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -26,11 +26,11 @@ self.addEventListener("fetch", event => {
 
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
+      fetch(event.request).then(response => {
         const copy = response.clone();
         caches.open(CACHE).then(cache => cache.put(event.request, copy));
         return response;
-      }))
+      }).catch(() => caches.match(event.request))
     );
     return;
   }
