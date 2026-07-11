@@ -1,6 +1,6 @@
 "use strict";
 
-const VERSION = "0.1.1";
+const VERSION = "0.1.2";
 const OVERPASS_SERVERS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
@@ -213,13 +213,82 @@ function drawRoute(route, fit = false) {
   if (fit && allLatLngs.length) state.map.fitBounds(L.latLngBounds(allLatLngs), { padding: [25, 25] });
 }
 
+function xmlEscape(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function safeFileName(value) {
+  const cleaned = String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 70);
+  return cleaned || `wandelroute_${Date.now()}`;
+}
+
+function buildGpx(route) {
+  const trackSegments = route.segments.map(segment => {
+    const points = segment.map(point =>
+      `      <trkpt lat="${point.lat.toFixed(7)}" lon="${point.lon.toFixed(7)}"></trkpt>`
+    ).join("\n");
+    return `    <trkseg>\n${points}\n    </trkseg>`;
+  }).join("\n");
+
+  const waypoint = route.start
+    ? `  <wpt lat="${route.start.lat.toFixed(7)}" lon="${route.start.lon.toFixed(7)}">\n    <name>Instappunt ${xmlEscape(route.name)}</name>\n  </wpt>\n`
+    : "";
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1"
+  creator="Walker Pro ${VERSION}"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+  <metadata>
+    <name>${xmlEscape(route.name)}</name>
+    <desc>Wandelroute geëxporteerd door Walker Pro</desc>
+    <time>${new Date().toISOString()}</time>
+  </metadata>
+${waypoint}  <trk>
+    <name>${xmlEscape(route.name)}</name>
+    <desc>${xmlEscape(`${route.distanceKm.toFixed(1)} km · ${route.network}`)}</desc>
+${trackSegments}
+  </trk>
+</gpx>`;
+}
+
+function downloadGpx(route) {
+  try {
+    const gpx = buildGpx(route);
+    const blob = new Blob([gpx], { type: "application/gpx+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeFileName(route.name)}.gpx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setStatus(`GPX van “${route.name}” is gedownload.`);
+  } catch (error) {
+    console.error(error);
+    setStatus("Het GPX-bestand kon niet worden gemaakt.");
+  }
+}
+
 function renderRoutes(routes) {
   clearRoutes();
   const container = $("results");
   $("resultCount").textContent = `${routes.length} route${routes.length === 1 ? "" : "s"}`;
 
   if (!routes.length) {
-    container.innerHTML = '<div class="empty">Er werden routes opgehaald, maar geen enkele viel binnen de ingestelde afstand van 4 tot 20 km. Probeer tijdelijk minimum 0 en maximum 30 km.</div>';
+    container.innerHTML = '<div class="empty">Er werden routes opgehaald, maar geen enkele viel binnen de ingestelde afstand. Probeer tijdelijk minimum 0 en maximum 30 km.</div>';
     return;
   }
 
@@ -234,6 +303,8 @@ function renderRoutes(routes) {
       : "Instappunt niet beschikbaar";
 
     node.querySelector(".show-route").addEventListener("click", () => drawRoute(route, true));
+    node.querySelector(".download-gpx").addEventListener("click", () => downloadGpx(route));
+
     const nav = node.querySelector(".navigate");
     if (route.start) {
       nav.href = `https://www.google.com/maps/dir/?api=1&destination=${route.start.lat},${route.start.lon}&travelmode=driving`;
