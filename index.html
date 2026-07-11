@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#174d36">
-  <meta name="description" content="Walker Pro 0.1.1 - wandelroutes zoeken rond je huidige locatie.">
+  <meta name="description" content="Walker Pro 0.1.2 - wandelroutes zoeken en als GPX downloaden.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <link rel="stylesheet" href="./css/style.css">
-  <title>Walker Pro 0.1.1</title>
+  <link rel="stylesheet" href="./css/style.css?v=0.1.2">
+  <title>Walker Pro 0.1.2</title>
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">🥾 Walker Pro</div>
-      <div class="version">versie 0.1.1</div>
+      <div class="version">versie 0.1.2</div>
     </div>
     <button id="installBtn" class="install hidden" type="button">Installeer app</button>
   </header>
@@ -23,7 +23,7 @@
   <main>
     <section class="panel controls">
       <h1>Wandelroutes rond mij</h1>
-      <p class="intro">Zoek bewegwijzerde wandelroutes binnen een gekozen straal en navigeer rechtstreeks naar het dichtstbijzijnde punt van de route.</p>
+      <p class="intro">Zoek bewegwijzerde wandelroutes binnen een gekozen straal, navigeer naar een instappunt of download de route als GPX voor je Garmin.</p>
 
       <div class="fields">
         <label>Straal
@@ -66,12 +66,13 @@
       <p class="route-start"></p>
       <div class="actions">
         <button class="show-route" type="button">🗺 Bekijk route</button>
+        <button class="download-gpx" type="button">⬇ GPX</button>
         <a class="navigate" target="_blank" rel="noopener">🚗 Breng mij erheen</a>
       </div>
     </article>
   </template>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="./js/app.js?v=0.1.1"></script>
+  <script src="./js/app.js?v=0.1.2"></script>
 </body>
 </html>
