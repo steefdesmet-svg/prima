@@ -1,9 +1,9 @@
-const CACHE = "walker-pro-0.1.2";
+const CACHE = "walker-pro-0.1.3";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=0.1.2",
-  "./js/app.js?v=0.1.2",
+  "./css/style.css?v=0.1.3",
+  "./js/app.js?v=0.1.3",
   "./manifest.webmanifest",
   "./icons/icon.svg"
 ];
