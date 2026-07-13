@@ -1,6 +1,6 @@
 "use strict";
 
-const VERSION = "0.1.2";
+const VERSION = "0.1.3";
 const OVERPASS_SERVERS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
@@ -45,14 +45,12 @@ function getPosition() {
   });
 }
 
-function showUserPosition(position) {
-  const { latitude, longitude, accuracy } = position.coords;
-  state.currentPosition = { lat: latitude, lon: longitude };
-  const latlng = [latitude, longitude];
+function showSearchPosition(lat, lon, label, accuracy = 0) {
+  state.currentPosition = { lat, lon };
+  const latlng = [lat, lon];
 
   if (state.userMarker) {
-    state.userMarker.setLatLng(latlng);
-    state.accuracyCircle.setLatLng(latlng).setRadius(accuracy || 0);
+    state.userMarker.setLatLng(latlng).setPopupContent(label);
   } else {
     state.userMarker = L.circleMarker(latlng, {
       radius: 9,
@@ -60,15 +58,76 @@ function showUserPosition(position) {
       weight: 3,
       fillColor: "#1877f2",
       fillOpacity: 1
-    }).bindPopup("Jouw huidige locatie").addTo(state.map);
-    state.accuracyCircle = L.circle(latlng, {
-      radius: accuracy || 0,
-      color: "#1877f2",
-      weight: 1,
-      fillOpacity: 0.08
-    }).addTo(state.map);
+    }).bindPopup(label).addTo(state.map);
   }
+
+  if (accuracy > 0) {
+    if (state.accuracyCircle) {
+      state.accuracyCircle.setLatLng(latlng).setRadius(accuracy);
+    } else {
+      state.accuracyCircle = L.circle(latlng, {
+        radius: accuracy,
+        color: "#1877f2",
+        weight: 1,
+        fillOpacity: 0.08
+      }).addTo(state.map);
+    }
+  } else if (state.accuracyCircle) {
+    state.map.removeLayer(state.accuracyCircle);
+    state.accuracyCircle = null;
+  }
+
   state.map.setView(latlng, 13);
+}
+
+async function geocodeLocation(query) {
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("q", query);
+  url.searchParams.set("accept-language", "nl");
+
+  const response = await fetch(url, {
+    headers: { "Accept": "application/json" }
+  });
+  if (!response.ok) throw new Error(`Locatiezoeker gaf fout ${response.status}.`);
+  const results = await response.json();
+  if (!Array.isArray(results) || results.length === 0) {
+    throw new Error(`De locatie “${query}” werd niet gevonden.`);
+  }
+
+  const result = results[0];
+  const lat = Number(result.lat);
+  const lon = Number(result.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    throw new Error("De gevonden locatie bevat geen geldige coördinaten.");
+  }
+  return { lat, lon, label: result.display_name || query };
+}
+
+async function resolveSearchLocation() {
+  const query = $("locationQuery").value.trim();
+  if (query) {
+    setStatus(`Locatie “${query}” zoeken...`);
+    const location = await geocodeLocation(query);
+    showSearchPosition(location.lat, location.lon, `Zoeklocatie: ${location.label}`);
+    return { lat: location.lat, lon: location.lon, label: location.label, source: "manual" };
+  }
+
+  setStatus("Jouw huidige locatie bepalen...");
+  const position = await getPosition();
+  showSearchPosition(
+    position.coords.latitude,
+    position.coords.longitude,
+    "Jouw huidige locatie",
+    position.coords.accuracy || 0
+  );
+  return {
+    lat: position.coords.latitude,
+    lon: position.coords.longitude,
+    label: "jouw huidige locatie",
+    source: "gps"
+  };
 }
 
 function validateInputs() {
@@ -213,6 +272,12 @@ function drawRoute(route, fit = false) {
   if (fit && allLatLngs.length) state.map.fitBounds(L.latLngBounds(allLatLngs), { padding: [25, 25] });
 }
 
+function scrollToMap(route) {
+  drawRoute(route, true);
+  $("mapSection").scrollIntoView({ behavior: "smooth", block: "start" });
+  setTimeout(() => state.map.invalidateSize(), 350);
+}
+
 function xmlEscape(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -299,10 +364,11 @@ function renderRoutes(routes) {
     node.querySelector(".route-info").textContent = route.network + (route.symbol ? ` · ${route.symbol}` : "");
     node.querySelector(".route-distance").textContent = `${route.distanceKm.toFixed(1).replace(".", ",")} km`;
     node.querySelector(".route-start").textContent = route.start
-      ? `Dichtstbijzijnde instappunt: ${route.start.distanceKm.toFixed(1).replace(".", ",")} km van jou`
+      ? `Dichtstbijzijnde instappunt: ${route.start.distanceKm.toFixed(1).replace(".", ",")} km van de zoeklocatie`
       : "Instappunt niet beschikbaar";
 
     node.querySelector(".show-route").addEventListener("click", () => drawRoute(route, true));
+    node.querySelector(".to-map").addEventListener("click", () => scrollToMap(route));
     node.querySelector(".download-gpx").addEventListener("click", () => downloadGpx(route));
 
     const nav = node.querySelector(".navigate");
@@ -322,25 +388,22 @@ async function searchRoutes() {
     const filters = validateInputs();
     button.disabled = true;
     clearRoutes();
-    setStatus("Jouw locatie bepalen...");
-    const position = await getPosition();
-    showUserPosition(position);
-    const user = state.currentPosition;
-    setStatus("Wandelroutes zoeken...");
-    const data = await fetchOverpass(buildQuery(user.lat, user.lon, filters.radius));
+    const location = await resolveSearchLocation();
+    setStatus(`Wandelroutes zoeken rond ${location.label}...`);
+    const data = await fetchOverpass(buildQuery(location.lat, location.lon, filters.radius));
     const rawCount = data.elements.length;
     setStatus(`${rawCount} routes ontvangen; afstanden berekenen...`);
-    const routes = normaliseRoutes(data.elements, filters, user);
+    const routes = normaliseRoutes(data.elements, filters, state.currentPosition);
     renderRoutes(routes);
     setStatus(`${routes.length} geschikte route${routes.length === 1 ? "" : "s"} gevonden uit ${rawCount} ontvangen routes.`);
   } catch (error) {
     console.error(error);
     const message = error?.code === 1
-      ? "Locatie niet toegestaan. Geef Chrome toestemming om je locatie te gebruiken."
+      ? "Locatie niet toegestaan. Vul eventueel zelf een plaatsnaam in, of geef Chrome toestemming voor GPS."
       : error?.code === 2
-        ? "Je locatie kon niet worden bepaald. Controleer of Locatie op je tablet aanstaat."
+        ? "Je locatie kon niet worden bepaald. Vul eventueel zelf een plaatsnaam in."
         : error?.code === 3
-          ? "Het bepalen van je locatie duurde te lang. Probeer opnieuw in open lucht."
+          ? "Het bepalen van je locatie duurde te lang. Vul eventueel zelf een plaatsnaam in."
           : error.message || "Er ging iets mis.";
     setStatus(message);
   } finally {
@@ -379,5 +442,8 @@ document.addEventListener("DOMContentLoaded", () => {
   setupPwaInstall();
   registerServiceWorker();
   $("searchBtn").addEventListener("click", searchRoutes);
+  $("locationQuery").addEventListener("keydown", event => {
+    if (event.key === "Enter") searchRoutes();
+  });
   console.info(`Walker Pro ${VERSION}`);
 });
